@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>患者登録・受付（デモ）</title>
+<style>
+  body { font-family: sans-serif; margin: 0; background: #f2f5fa; color: #0b1f3a; }
+  header { background: #0b1f3a; color: #f5f7fa; padding: 16px 24px; }
+  header h1 { margin: 0 0 4px; font-size: 22px; }
+  header p { margin: 2px 0; font-size: 14px; color: #bfd0e8; }
+  main { max-width: 960px; margin: 0 auto; padding: 16px; }
+  section { background: #fff; border: 1px solid #c9d6ea; border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+  h2 { margin: 0 0 12px; font-size: 18px; }
+  label { display: inline-block; margin: 4px 12px 4px 0; font-size: 14px; }
+  input, select { font-size: 15px; padding: 5px; }
+  button { font-size: 15px; padding: 6px 14px; background: #1b3a66; color: #fff; border: 0; border-radius: 6px; cursor: pointer; }
+  table { border-collapse: collapse; width: 100%; margin-top: 10px; font-size: 14px; }
+  th, td { border: 1px solid #c9d6ea; padding: 5px 8px; text-align: left; }
+  th { background: #dce6f5; }
+  .ok { color: #1a7f37; } .ng { color: #b3261e; }
+</style>
+</head>
+<body>
+<header>
+  <h1>患者登録・受付（デモ）</h1>
+  <p id="info">読み込み中…</p>
+  <p>※ 架空のデータだけを入力してください。実際の患者情報は入力しないでください。</p>
+</header>
+<main>
+  <section>
+    <h2>1. 患者登録</h2>
+    <form id="pform">
+      <label>氏名 <input name="name" required maxlength="50"></label>
+      <label>カナ氏名 <input name="name_kana" required maxlength="50" placeholder="ヤマダ タロウ"></label>
+      <label>生年月日 <input name="birth_date" type="date" required></label>
+      <label>性別
+        <select name="sex"><option>男</option><option>女</option><option>その他</option></select>
+      </label>
+      <button type="submit">登録</button>
+    </form>
+    <p id="pmsg"></p>
+  </section>
+
+  <section>
+    <h2>2. 患者検索</h2>
+    <input id="q" placeholder="氏名またはカナの一部"> <button id="search" type="button">検索</button>
+    <span id="total"></span>
+    <table>
+      <thead><tr><th>患者番号</th><th>氏名</th><th>カナ氏名</th><th>生年月日</th><th>性別</th></tr></thead>
+      <tbody id="ptable"></tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>3. 受付</h2>
+    <label>患者番号 <input id="vno" placeholder="P000001" maxlength="7"></label>
+    <label>診療科 <select id="vdep"></select></label>
+    <button id="visit" type="button">受付する</button>
+    <p id="vmsg"></p>
+    <h3>本日の受付一覧</h3>
+    <table>
+      <thead><tr><th>受付ID</th><th>患者番号</th><th>氏名</th><th>診療科</th><th>状態</th></tr></thead>
+      <tbody id="vtable"></tbody>
+    </table>
+  </section>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const PATIENT_COLS = ['patient_no', 'name', 'name_kana', 'birth_date', 'sex'];
+const VISIT_COLS = ['id', 'patient_no', 'patient_name', 'department_name', 'status'];
+
+async function api(path, method, body) {
+  const opts = { method: method || 'GET' };
+  if (body) { opts.headers = { 'Content-Type': 'application/json' }; opts.body = JSON.stringify(body); }
+  try {
+    const r = await fetch(path, opts);
+    const data = await r.json().catch(() => ({}));
+    return { ok: r.ok, data };
+  } catch (e) {
+    return { ok: false, data: { error: '通信できません。しばらくしてからやり直してください' } };
+  }
+}
+function fill(tbody, rows, cols) {
+  tbody.replaceChildren();
+  for (const row of rows) {
+    const tr = document.createElement('tr');
+    for (const c of cols) {
+      const td = document.createElement('td');
+      td.textContent = row[c] == null ? '' : row[c];
+      tr.appendChild(td);
+    }
+    tbody.appendChild(tr);
+  }
+}
+function say(el, ok, res) {
+  const d = res.data;
+  el.className = ok ? 'ok' : 'ng';
+  el.textContent = ok ? res.message : [d.error].concat(d.details || []).join(' / ');
+}
+async function loadInfo() {
+  const r = await api('/api/info');
+  $('info').textContent = r.ok ? `バージョン ${r.data.version} ／ 応答した Pod：${r.data.pod}` : '情報を取得できません';
+}
+async function loadDepartments() {
+  const r = await api('/api/departments');
+  if (!r.ok) return;
+  for (const d of r.data) {
+    const o = document.createElement('option');
+    o.value = d.code; o.textContent = `${d.name}（${d.code}）`;
+    $('vdep').appendChild(o);
+  }
+}
+async function loadPatients() {
+  const r = await api('/api/patients?q=' + encodeURIComponent($('q').value));
+  if (!r.ok) return;
+  $('total').textContent = `  該当 ${r.data.total} 件（新しい順に最大20件を表示）`;
+  fill($('ptable'), r.data.patients, PATIENT_COLS);
+}
+async function loadVisits() {
+  const r = await api('/api/visits');
+  if (r.ok) fill($('vtable'), r.data, VISIT_COLS);
+}
+
+$('pform').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const body = Object.fromEntries(new FormData(ev.target).entries());
+  const r = await api('/api/patients', 'POST', body);
+  r.message = r.ok ? `登録しました。患者番号は ${r.data.patient_no} です` : '';
+  say($('pmsg'), r.ok, r);
+  if (r.ok) { ev.target.reset(); loadPatients(); }
+});
+$('search').addEventListener('click', loadPatients);
+$('visit').addEventListener('click', async () => {
+  const r = await api('/api/visits', 'POST', { patient_no: $('vno').value.trim(), department_code: $('vdep').value });
+  r.message = r.ok ? `受付しました（${r.data.patient_name} さん／${r.data.department_name}）` : '';
+  say($('vmsg'), r.ok, r);
+  if (r.ok) loadVisits();
+});
+
+loadInfo(); loadDepartments(); loadPatients(); loadVisits();
+</script>
+</body>
+</html>

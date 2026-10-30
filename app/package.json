@@ -1,0 +1,13 @@
+{
+  "name": "clinic-app",
+  "version": "1.0.0",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "start": "node main.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "pg": "^8.11.3"
+  }
+}

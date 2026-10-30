@@ -1,0 +1,67 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: clinic-db
+  namespace: clinic
+spec:
+  selector:
+    app: clinic-db
+  ports:
+  - port: 5432
+    targetPort: 5432
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: clinic-db
+  namespace: clinic
+spec:
+  serviceName: clinic-db
+  replicas: 1
+  selector:
+    matchLabels:
+      app: clinic-db
+  template:
+    metadata:
+      labels:
+        app: clinic-db
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:16-alpine
+        ports:
+        - containerPort: 5432
+        env:
+        - name: POSTGRES_DB
+          value: clinic
+        - name: POSTGRES_USER
+          value: clinic
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: clinic-db
+              key: password
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/postgresql/data
+        readinessProbe:
+          exec:
+            command: ["pg_isready", "-U", "clinic", "-d", "clinic"]
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            memory: "512Mi"
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: 1Gi

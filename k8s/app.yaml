@@ -1,0 +1,84 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: clinic-app-config
+  namespace: clinic
+data:
+  DB_HOST: clinic-db
+  DB_PORT: "5432"
+  DB_NAME: clinic
+  DB_USER: clinic
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: clinic-app
+  namespace: clinic
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: clinic-app
+  template:
+    metadata:
+      labels:
+        app: clinic-app
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: clinic-app
+        image: clinic-app:IMAGE_TAG
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 3000
+        envFrom:
+        - configMapRef:
+            name: clinic-app-config
+        env:
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: clinic-db
+              key: password
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 3000
+          initialDelaySeconds: 2
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 3000
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        lifecycle:
+          preStop:
+            exec:
+              command: ["sleep", "10"]
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "64Mi"
+          limits:
+            cpu: "300m"
+            memory: "256Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: clinic-app
+  namespace: clinic
+spec:
+  type: NodePort
+  selector:
+    app: clinic-app
+  ports:
+  - port: 3000
+    targetPort: 3000
+    nodePort: 30090

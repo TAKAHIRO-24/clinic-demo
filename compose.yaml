@@ -1,0 +1,14 @@
+services:
+  clinic-proxy:
+    image: alpine/socat
+    container_name: clinic-proxy
+    restart: unless-stopped
+    command: tcp-listen:30090,fork,reuseaddr tcp:demo-control-plane:30090
+    ports:
+      - "30090:30090"
+    networks:
+      - kind
+
+networks:
+  kind:
+    external: true
